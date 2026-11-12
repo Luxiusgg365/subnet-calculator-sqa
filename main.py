@@ -323,7 +323,60 @@ def bagi_subnet(ip, prefix_awal, prefix_baru, offset=0, limit=256) -> dict:
 
 
 def alokasi_vlsm(network_cidr: str, kebutuhan_host: list[int]) -> list[dict]:
-    raise NotImplementedError("VLSM belum diimplementasikan")
+    if network_cidr is None or not isinstance(network_cidr, str):
+        _err("Network CIDR harus berupa teks")
+    if not isinstance(kebutuhan_host, list):
+        _err("Kebutuhan host harus berupa daftar")
+    if len(kebutuhan_host) == 0:
+        _err("Daftar kebutuhan host tidak boleh kosong")
+    kebutuhan = []
+    for k in kebutuhan_host:
+        if isinstance(k, bool) or not isinstance(k, int):
+            _err("Setiap kebutuhan host harus bilangan bulat >= 1")
+        if k < 1:
+            _err("Setiap kebutuhan host harus bilangan bulat >= 1")
+        kebutuhan.append(k)
+
+    s = network_cidr.strip()
+    if "/" not in s:
+        _err("Network CIDR harus dalam format alamat/prefix, mis. 192.168.1.0/24")
+    ip_part, pref_part = s.rsplit("/", 1)
+    ip_int = _ip_to_int(ip_part.strip())
+    if pref_part.strip().isdigit() or (pref_part.strip().startswith("-") and pref_part.strip()[1:].isdigit()):
+        pref = _validate_prefix(pref_part.strip())
+    else:
+        pref = parse_netmask(pref_part.strip())
+    net_base = ip_int & _prefix_to_mask(pref)
+    if net_base != ip_int:
+        _err("Network CIDR bukan alamat network yang valid; bit host harus nol")
+    parent_total = 1 << (32 - pref)
+    parent_end = net_base + parent_total
+
+    terurut = sorted(kebutuhan, reverse=True)
+    hasil = []
+    cursor = net_base
+    for need in terurut:
+        ukuran_dibutuhkan = need + 2
+        bits_host = 0
+        while (1 << bits_host) < ukuran_dibutuhkan:
+            bits_host += 1
+        if bits_host < 2:
+            bits_host = 2  # minimal /30
+        sub_prefix = 32 - bits_host
+        if sub_prefix < pref:
+            _err("Kebutuhan host tidak muat dalam network yang disediakan")
+        blok = 1 << bits_host
+        # align cursor ke batas blok
+        if cursor % blok != 0:
+            cursor = ((cursor // blok) + 1) * blok
+        if cursor + blok > parent_end:
+            _err("Kebutuhan host tidak muat dalam network yang disediakan")
+        h = hitung_subnet(_int_to_ip(cursor), sub_prefix)
+        item = {"kebutuhan": need, "network_cidr": f"{h['network']}/{sub_prefix}"}
+        item.update(h)
+        hasil.append(item)
+        cursor += blok
+    return hasil
 
 
 # ---------- API ----------
@@ -439,7 +492,5 @@ async def api_vlsm(request: Request):
             _err("Field 'kebutuhan_host' harus berupa daftar angka")
         hasil = alokasi_vlsm(network, kebutuhan)
         return JSONResponse(content=hasil)
-    except NotImplementedError as e:
-        return _bad(str(e))
     except ValueError as e:
         return _bad(str(e))

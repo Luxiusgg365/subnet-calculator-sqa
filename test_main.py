@@ -335,10 +335,66 @@ def test_api_ipcalc_supernet():
     assert d["pembagian"]["network"] == "192.168.4.0"
 
 
-def test_api_vlsm_not_implemented():
-    r = client.post("/api/vlsm", json={"network": "192.168.1.0/24", "kebutuhan_host": [10]})
-    # belum diimplementasi -> 400
-    assert r.status_code == 400
+# --- VLSM ---
+
+def test_alokasi_vlsm_basic():
+    from main import alokasi_vlsm
+    hasil = alokasi_vlsm("192.168.1.0/24", [100, 50, 20, 2])
+    assert [h["network_cidr"] for h in hasil] == [
+        "192.168.1.0/25",
+        "192.168.1.128/26",
+        "192.168.1.192/27",
+        "192.168.1.224/30",
+    ]
+    assert hasil[0]["kebutuhan"] == 100
+
+
+def test_alokasi_vlsm_unordered():
+    from main import alokasi_vlsm
+    hasil = alokasi_vlsm("192.168.1.0/24", [2, 100, 20, 50])
+    assert [h["network_cidr"] for h in hasil] == [
+        "192.168.1.0/25",
+        "192.168.1.128/26",
+        "192.168.1.192/27",
+        "192.168.1.224/30",
+    ]
+
+
+def test_alokasi_vlsm_tidak_muat():
+    from main import alokasi_vlsm
+    with pytest.raises(ValueError):
+        alokasi_vlsm("192.168.1.0/24", [200, 100])
+
+
+def test_alokasi_vlsm_bukan_network():
+    from main import alokasi_vlsm
+    with pytest.raises(ValueError):
+        alokasi_vlsm("192.168.1.5/24", [10])
+
+
+def test_alokasi_vlsm_minimal_dan_invalid():
+    from main import alokasi_vlsm
+    hasil = alokasi_vlsm("192.168.1.0/24", [1])
+    assert hasil[0]["network_cidr"] == "192.168.1.0/30"
+    with pytest.raises(ValueError):
+        alokasi_vlsm("192.168.1.0/24", [])
+    with pytest.raises(ValueError):
+        alokasi_vlsm("192.168.1.0/24", [0])
+    with pytest.raises(ValueError):
+        alokasi_vlsm("192.168.1.0/24", [-1])
+
+
+def test_api_vlsm_ok():
+    r = client.post("/api/vlsm", json={"network": "192.168.1.0/24", "kebutuhan_host": [100, 50, 20, 2]})
+    assert r.status_code == 200
+    hasil = r.json()
+    assert isinstance(hasil, list)
+    assert [b["network_cidr"] for b in hasil] == [
+        "192.168.1.0/25",
+        "192.168.1.128/26",
+        "192.168.1.192/27",
+        "192.168.1.224/30",
+    ]
 
 
 def test_api_vlsm_bad_body():
