@@ -245,3 +245,183 @@ def test_dev_versi_dengan_env(monkeypatch):
     r = _get("/__dev/versi")
     assert r.status_code == 200
     assert "versi" in r.json()
+
+# --- tambahan untuk coverage ---
+
+def test_ping():
+    r = _get("/api/ping")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+
+def test_parse_netmask_none_empty():
+    with pytest.raises(ValueError):
+        parse_netmask(None)
+    with pytest.raises(ValueError):
+        parse_netmask("")
+    with pytest.raises(ValueError):
+        parse_netmask("   ")
+
+
+def test_parse_netmask_dotted_invalid():
+    with pytest.raises(ValueError):
+        parse_netmask("255.255.255.256")
+    with pytest.raises(ValueError):
+        parse_netmask("abc.def.gha.jkl")
+
+
+def test_ip_validation_variants():
+    with pytest.raises(ValueError):
+        hitung_subnet(None, 24)
+    with pytest.raises(ValueError):
+        hitung_subnet(" 1.2.3.4", 24)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4 ", 24)
+    with pytest.raises(ValueError):
+        hitung_subnet("1..3.4", 24)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4.5", 24)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.a", 24)
+
+
+def test_prefix_validation():
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", "abc")
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", "")
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", 1.5)
+
+
+def test_bagi_subnet_limit_offset():
+    r = bagi_subnet("192.168.0.1", 24, 26, offset=1, limit=2)
+    assert r["offset"] == 1
+    assert r["limit"] == 2
+    assert len(r["subnet"]) == 2
+    assert r["subnet"][0]["nomor"] == 2
+    assert r["terpotong"] is True
+    r2 = bagi_subnet("192.168.0.1", 24, 26, offset=0, limit=5000)
+    assert r2["limit"] == 1024
+
+
+def test_bagi_subnet_errors():
+    with pytest.raises(ValueError):
+        bagi_subnet("192.168.0.1", 24, 26, offset=-1)
+    with pytest.raises(ValueError):
+        bagi_subnet("192.168.0.1", 24, 26, limit=-1)
+    with pytest.raises(ValueError):
+        bagi_subnet("192.168.0.1", 24, 26, offset="x")
+
+
+def test_api_ipcalc_with_netmask_param():
+    r = _get("/api/ipcalc?address=192.168.0.1&netmask=255.255.255.0")
+    assert r.status_code == 200
+    assert r.json()["hasil"]["prefix"] == 24
+
+
+def test_api_ipcalc_invalid_address():
+    r = _get("/api/ipcalc?address=")
+    assert r.status_code == 400
+    r = _get("/api/ipcalc?address=192.168.1.1/24/25")
+    assert r.status_code == 400
+
+
+def test_api_ipcalc_supernet():
+    r = _get("/api/ipcalc?address=192.168.5.1/24&netmask2=/22")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["pembagian"]["mode"] == "supernet"
+    assert d["pembagian"]["network"] == "192.168.4.0"
+
+
+def test_api_vlsm_not_implemented():
+    r = client.post("/api/vlsm", json={"network": "192.168.1.0/24", "kebutuhan_host": [10]})
+    # belum diimplementasi -> 400
+    assert r.status_code == 400
+
+
+def test_api_vlsm_bad_body():
+    r = client.post("/api/vlsm", content="notjson", headers={"Content-Type": "application/json"})
+    assert r.status_code == 400
+    r = client.post("/api/vlsm", json=[1,2,3])
+    assert r.status_code == 400
+    r = client.post("/api/vlsm", json={"network": 123, "kebutuhan_host": [10]})
+    assert r.status_code == 400
+    r = client.post("/api/vlsm", json={"network": "192.168.1.0/24", "kebutuhan_host": "x"})
+    assert r.status_code == 400
+
+
+def test_parse_netmask_slash_zero():
+    assert parse_netmask("/0") == 0
+    assert parse_netmask("0") == 0
+
+
+def test_hitung_jenis_others():
+    assert "Jaringan ini" in hitung_subnet("0.0.0.1", 8)["jenis"]
+    assert "Broadcast terbatas" in hitung_subnet("255.255.255.255", 32)["jenis"]
+    assert "Dicadangkan" in hitung_subnet("240.0.0.1", 4)["jenis"]
+    assert "Dokumentasi" in hitung_subnet("192.0.2.1", 24)["jenis"]
+
+# --- coverage tambahan ---
+
+def test_validation_internal_branches():
+    with pytest.raises(ValueError):
+        hitung_subnet(123, 24)
+    with pytest.raises(ValueError):
+        parse_netmask(123)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", True)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", 1.0)
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", "  ")
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", "1.2")
+    with pytest.raises(ValueError):
+        hitung_subnet("1.2.3.4", None)
+
+
+def test_validation_handler_422():
+    # trigger RequestValidationError -> 422->400 handler (missing required query)
+    r = client.get("/api/subnet")
+    assert r.status_code == 400
+
+
+def test_api_vlsm_network_not_str():
+    r = client.post("/api/vlsm", json={"network": None, "kebutuhan_host": [10]})
+    assert r.status_code == 400
+
+
+def test_parse_address_edge_cases():
+    # address with spaces around not allowed by our check
+    r = _get("/api/ipcalc?address= 192.168.1.1/24")
+    assert r.status_code == 400
+    # malformed / 
+    r = _get("/api/ipcalc?address=192.168.1.1/")
+    assert r.status_code == 400
+    r = _get("/api/ipcalc?address=/24")
+    assert r.status_code == 400
+
+
+def test_more_coverage_branches():
+    # parse_netmask string non-numeric non-dotted
+    with pytest.raises(ValueError):
+        parse_netmask("abc")
+    # leading/trailing spaces in netmask token handled? parse_netmask strips
+    assert parse_netmask(" /24 ") == 24
+    # address internal space caught in ipcalc
+    r = _get("/api/ipcalc?address=192.168.1.1 /24")
+    assert r.status_code == 400
+    # prefix param edge via api subnet
+    r = _get("/api/subnet?ip=1.2.3.4&prefix= 24 ")
+    assert r.status_code == 200
+    # ipcalc with explicit netmask different form same value ok
+    r = _get("/api/ipcalc?address=10.0.0.1&netmask=/8")
+    assert r.status_code == 200 and r.json()["hasil"]["prefix"] == 8
+    # bagi_subnet invalid limit type
+    with pytest.raises(ValueError):
+        bagi_subnet("1.2.3.4",24,26,limit="x")
+    # address with prefix in right containing dot
+    r = _get("/api/ipcalc?address=10.0.0.1/255.0.0.0")
+    assert r.status_code == 200 and r.json()["hasil"]["prefix"] == 8

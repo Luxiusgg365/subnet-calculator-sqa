@@ -439,5 +439,7 @@ async def api_vlsm(request: Request):
             _err("Field 'kebutuhan_host' harus berupa daftar angka")
         hasil = alokasi_vlsm(network, kebutuhan)
         return JSONResponse(content=hasil)
+    except NotImplementedError as e:
+        return _bad(str(e))
     except ValueError as e:
         return _bad(str(e))
