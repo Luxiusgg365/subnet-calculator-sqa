@@ -11,9 +11,9 @@ stop:
 logs:
 	$(DC) logs -f dev
 test:       ## jalankan pytest di dalam container
-	$(DC) run --rm dev pytest -v
+	$(DC) run --rm -e APP_ENV="" dev pytest -v
 cov:
-	$(DC) run --rm dev pytest test_main.py -v --cov=main --cov-report=term-missing
+	$(DC) run --rm -e APP_ENV="" dev pytest test_main.py -v --cov=main --cov-report=term-missing
 rebuild:    ## setelah pyproject.toml / uv.lock berubah
 	$(DC) build --no-cache dev
 prod-build:
