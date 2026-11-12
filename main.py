@@ -494,3 +494,102 @@ async def api_vlsm(request: Request):
         return JSONResponse(content=hasil)
     except ValueError as e:
         return _bad(str(e))
+
+# ---------- IPv6 ----------
+
+import ipaddress
+
+
+def _jenis_ipv6(ip: ipaddress.IPv6Address) -> str:
+    if ip.is_loopback:
+        return "Loopback (::1)"
+    if ip.is_unspecified:
+        return "Unspecified (::)"
+    if ip.ipv4_mapped:
+        return "IPv4-mapped (::ffff:0:0/96)"
+    if ip.is_link_local:
+        return "Link-local (fe80::/10)"
+    if ip.is_multicast:
+        return "Multicast (ff00::/8)"
+    # unique local fc00::/7
+    try:
+        if ip in ipaddress.IPv6Network("fc00::/7"):
+            return "Unique Local Address (fc00::/7)"
+    except Exception:
+        pass
+    if ip.is_global:
+        return "Global Unicast"
+    try:
+        if ip in ipaddress.IPv6Network("2001:db8::/32"):
+            return "Dokumentasi (2001:db8::/32)"
+    except Exception:
+        pass
+    return "Reserved/Lainnya"
+
+
+def hitung_ipv6(address: str, prefix: Any = None) -> dict:
+    if address is None or not isinstance(address, str):
+        _err("Alamat IPv6 tidak boleh kosong")
+    addr = address.strip()
+    if addr == "":
+        _err("Alamat IPv6 tidak boleh kosong")
+    if any(c.isspace() for c in addr):
+        _err("Alamat IPv6 tidak boleh mengandung spasi")
+
+    pfx = None
+    base = addr
+    if "/" in addr:
+        left, right = addr.rsplit("/", 1)
+        if left == "" or right == "":
+            _err("Format alamat/prefix IPv6 tidak valid")
+        base = left
+        if not re.fullmatch(r"-?[0-9]+", right.strip()):
+            _err("Prefix IPv6 harus bilangan bulat 0-128")
+        pfx = int(right.strip())
+
+    if prefix is not None and str(prefix).strip() != "":
+        ps = str(prefix).strip()
+        if not re.fullmatch(r"-?[0-9]+", ps):
+            _err("Prefix IPv6 harus bilangan bulat 0-128")
+        p2 = int(ps)
+        if pfx is not None and p2 != pfx:
+            _err("Prefix pada address dan parameter prefix berbeda; pilih salah satu")
+        pfx = p2
+
+    if pfx is None:
+        pfx = 64
+    if pfx < 0 or pfx > 128:
+        _err(f"Prefix {pfx} di luar rentang; harus 0-128")
+
+    try:
+        ip_obj = ipaddress.IPv6Address(base)
+    except Exception:
+        _err("Alamat IPv6 tidak valid")
+
+    try:
+        net = ipaddress.IPv6Network((ip_obj, pfx), strict=False)
+    except Exception:
+        _err("Alamat/prefix IPv6 tidak valid")
+
+    total = 1 << (128 - pfx)
+    return {
+        "version": 6,
+        "address": ip_obj.compressed,
+        "address_expanded": ip_obj.exploded,
+        "prefix": pfx,
+        "network": net.network_address.compressed,
+        "network_cidr": net.with_prefixlen,
+        "first_address": net.network_address.compressed,
+        "last_address": net.broadcast_address.compressed,
+        "total_addresses": str(total),
+        "jenis": _jenis_ipv6(ip_obj),
+    }
+
+
+@app.get("/api/ipv6")
+def api_ipv6(address: str = Query(...), prefix: str | None = Query(None)):
+    try:
+        hasil = hitung_ipv6(address, prefix)
+        return hasil
+    except ValueError as e:
+        return _bad(str(e))
