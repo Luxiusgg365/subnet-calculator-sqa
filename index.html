@@ -1,34 +1,181 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kalkulator Subnet</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalkulator Subnet & VLSM</title>
+<style>
+:root{--bg:#ffffff;--surface:#f8f9fa;--border:#dadce0;--text:#202124;--muted:#5f6368;--accent:#1a73e8;--error:#d93025;--net:#1a73e8;--host:#e37400;--new:#188038}
+[data-theme="dark"]{--bg:#202124;--surface:#303134;--border:#5f6368;--text:#e8eaed;--muted:#9aa0a6;--accent:#8ab4f8;--error:#f28b82;--net:#8ab4f8;--host:#fbbc04;--new:#81c995}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+header{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font-size:1.25rem;margin:0} .controls{display:flex;gap:8px;flex-wrap:wrap}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{padding:10px 16px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:1rem}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:720px){.grid{grid-template-columns:1fr 1fr 1fr}}
+label{display:block;font-size:.875rem;color:var(--muted);margin-bottom:4px}
+input[type=text],select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:1rem;background:var(--bg);color:var(--text)}
+input:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+button{padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{padding:4px 10px;border-radius:16px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:.85rem}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.table-wrap{overflow-x:auto}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;background:var(--border);margin-left:6px}
+.bit-net{color:var(--net)} .bit-host{color:var(--host)} .bit-new{color:var(--new);text-decoration:underline}
+.legend{font-size:.85rem;color:var(--muted);margin-top:8px}
+.error{color:var(--error);font-size:.9rem;margin-top:4px;min-height:1.2em}
+.hidden{display:none}
+.bar{height:18px;background:var(--border);border-radius:9px;overflow:hidden;display:flex;margin:8px 0}
+.bar-used{background:var(--accent)} .bar-free{background:var(--new);opacity:.4}
+@media print{header .controls,.chips,.actions,button{display:none} body{background:#fff;color:#000} .card{border:1px solid #ccc}}
+</style>
 </head>
 <body>
+<header>
   <h1>Kalkulator Subnet &amp; VLSM</h1>
-  <p id="status">Scaffold siap</p>
-  <script>
-    (function () {
-      var last = null;
-      var stopped = false;
-      async function cek() {
-        if (stopped) return;
-        try {
-          var r = await fetch("/__dev/versi", { cache: "no-store" });
-          if (r.status === 404) { stopped = true; return; }
-          if (!r.ok) return;
-          var data = await r.json();
-          if (last !== null && data.versi !== last) {
-            location.reload();
-            return;
-          }
-          last = data.versi;
-        } catch (e) {}
-      }
-      cek();
-      setInterval(cek, 1000);
-    })();
-  </script>
+  <div class="controls" aria-label="Pengaturan">
+    <label><span class="sr" style="position:absolute;left:-9999px">Tema</span>
+      <select id="themeSel" aria-label="Tema"><option value="auto">Otomatis</option><option value="light">Terang</option><option value="dark">Gelap</option></select>
+    </label>
+    <label><span class="sr" style="position:absolute;left:-9999px">Bahasa</span>
+      <select id="langSel" aria-label="Bahasa"><option value="id">ID</option><option value="en">EN</option></select>
+    </label>
+  </div>
+</header>
+<main>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="subnet" role="tab" aria-selected="true">Subnet</button>
+    <button class="tab" data-tab="vlsm" role="tab" aria-selected="false">VLSM</button>
+  </div>
+
+  <section id="panel-subnet" class="panel active" role="tabpanel">
+    <div class="card">
+      <div class="grid">
+        <div><label for="address">Address (host atau network)</label><input id="address" type="text" value="172.16.5.130/25" autocomplete="off"></div>
+        <div><label for="netmask">Netmask</label><input id="netmask" type="text" placeholder="kosong = default kelas" autocomplete="off"></div>
+        <div><label for="netmask2">Pindah ke netmask (opsional)</label><input id="netmask2" type="text" placeholder="/26 untuk subnet, /22 untuk supernet" autocomplete="off"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btnHitung" class="primary">Hitung</button>
+        <label style="display:flex;align-items:center;gap:6px;margin:0"><input id="modeBelajar" type="checkbox"> Mode Belajar</label>
+      </div>
+      <div id="errSubnet" class="error" aria-live="polite"></div>
+      <div class="chips" aria-label="Contoh">
+        <button class="chip" data-a="192.168.0.1/24">192.168.0.1/24</button>
+        <button class="chip" data-a="172.16.5.130/25">172.16.5.130/25</button>
+        <button class="chip" data-a="10.0.0.0/30">10.0.0.0/30</button>
+        <button class="chip" data-a="192.168.1.0/31">192.168.1.0/31</button>
+        <button class="chip" data-a="192.168.1.5/32">192.168.1.5/32</button>
+      </div>
+    </div>
+
+    <div class="card" id="hasilCard">
+      <div class="row actions" style="justify-content:space-between;margin-bottom:8px">
+        <strong>Hasil</strong>
+        <div><button id="copyAll">Salin semua</button> <button id="copyLink">Salin tautan</button></div>
+      </div>
+      <div class="table-wrap">
+        <table aria-label="Hasil subnet">
+          <thead><tr><th>Label</th><th>Desimal</th><th>Biner</th></tr></thead>
+          <tbody id="hasilBody">
+            <tr><td>Address <span class="badge">Host</span></td><td class="mono">172.16.5.130</td><td class="mono"><span class="bit-net">10101100.00010000.00000101.1</span><span class="bit-host">0000010</span></td></tr>
+            <tr><td>Netmask <span class="badge">/25</span></td><td class="mono">255.255.255.128</td><td class="mono"><span class="bit-net">11111111.11111111.11111111.1</span><span class="bit-host">0000000</span></td></tr>
+            <tr><td>Wildcard</td><td class="mono">0.0.0.127</td><td class="mono"><span class="bit-net">00000000.00000000.00000000.0</span><span class="bit-host">1111111</span></td></tr>
+            <tr><td>Network <span class="badge">Kelas B</span> <span class="badge">Private Internet (RFC 1918)</span></td><td class="mono">172.16.5.128</td><td class="mono"><span class="bit-net">10101100.00010000.00000101.1</span><span class="bit-host">0000000</span></td></tr>
+            <tr><td>Broadcast</td><td class="mono">172.16.5.255</td><td class="mono"><span class="bit-net">10101100.00010000.00000101.1</span><span class="bit-host">1111111</span></td></tr>
+            <tr><td>HostMin</td><td class="mono">172.16.5.129</td><td class="mono"><span class="bit-net">10101100.00010000.00000101.1</span><span class="bit-host">0000001</span></td></tr>
+            <tr><td>HostMax</td><td class="mono">172.16.5.254</td><td class="mono"><span class="bit-net">10101100.00010000.00000101.1</span><span class="bit-host">1111110</span></td></tr>
+            <tr><td>Hosts/Net</td><td class="mono">126</td><td class="mono">(total 128)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="legend">Legenda bit: <span class="bit-net">jaringan</span> · <span class="bit-host">host</span> · <span class="bit-new">bit baru subnet</span> (bergaris bawah).</div>
+    </div>
+
+    <div class="card hidden" id="belajarCard">
+      <strong>Mode Belajar (contoh /25)</strong>
+      <pre class="mono" style="white-space:pre-wrap;margin:8px 0">IP      10101100.00010000.00000101.10000010
+Mask AND 11111111.11111111.11111111.10000000
+------------------------------------------------
+Network  10101100.00010000.00000101.10000000 (172.16.5.128)
+
+Wildcard 00000000.00000000.00000000.01111111
+Network OR Wildcard -> Broadcast 172.16.5.255
+HostMin = Network + 1 = 172.16.5.129
+HostMax = Broadcast - 1 = 172.16.5.254
+Host usable = 2^(32-25) - 2 = 2^7 - 2 = 126</pre>
+    </div>
+
+    <div class="card" id="bagiCard">
+      <div class="row actions" style="justify-content:space-between"><strong>Pembagian Subnet (contoh /24 → /26)</strong><button id="expSubnet">Ekspor CSV</button></div>
+      <p class="mono">Jumlah subnet: 4 · Hosts per subnet: 62</p>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Network</th><th>Broadcast</th><th>HostMin</th><th>HostMax</th><th>Hosts</th></tr></thead>
+      <tbody class="mono"><tr><td>1</td><td>192.168.0.0/26</td><td>192.168.0.63</td><td>192.168.0.1</td><td>192.168.0.62</td><td>62</td></tr>
+      <tr><td>2</td><td>192.168.0.64/26</td><td>192.168.0.127</td><td>192.168.0.65</td><td>192.168.0.126</td><td>62</td></tr>
+      <tr><td>3</td><td>192.168.0.128/26</td><td>192.168.0.191</td><td>192.168.0.129</td><td>192.168.0.190</td><td>62</td></tr>
+      <tr><td>4</td><td>192.168.0.192/26</td><td>192.168.0.255</td><td>192.168.0.193</td><td>192.168.0.254</td><td>62</td></tr></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="panel-vlsm" class="panel" role="tabpanel">
+    <div class="card">
+      <div class="grid">
+        <div><label for="vlsmNet">Network (CIDR)</label><input id="vlsmNet" type="text" value="192.168.1.0/24"></div>
+        <div style="grid-column:span 2"><label>Kebutuhan host (label opsional)</label>
+          <div id="vlsmRows"><div class="row" style="margin-bottom:6px"><input type="text" value="100" aria-label="Kebutuhan" style="max-width:120px"><input type="text" value="LAN Guru" aria-label="Label"></div>
+          <div class="row" style="margin-bottom:6px"><input type="text" value="50" aria-label="Kebutuhan" style="max-width:120px"><input type="text" value="LAN Siswa" aria-label="Label"></div>
+          <div class="row" style="margin-bottom:6px"><input type="text" value="20" aria-label="Kebutuhan" style="max-width:120px"><input type="text" value="Lab" aria-label="Label"></div>
+          <div class="row" style="margin-bottom:6px"><input type="text" value="2" aria-label="Kebutuhan" style="max-width:120px"><input type="text" value="Link" aria-label="Label"></div></div>
+          <button id="addNeed" style="margin-top:6px">+ Tambah</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="btnVlsm" class="primary">Hitung VLSM</button></div>
+      <div id="errVlsm" class="error" aria-live="polite"></div>
+    </div>
+    <div class="card">
+      <div class="row actions" style="justify-content:space-between"><strong>Hasil VLSM (contoh)</strong><button id="expVlsm">Ekspor CSV</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Label</th><th>Kebutuhan</th><th>Dialokasikan</th><th>Network</th><th>Mask</th><th>Range host</th><th>Broadcast</th></tr></thead>
+      <tbody class="mono"><tr><td>LAN Guru</td><td>100</td><td>/25 (126)</td><td>192.168.1.0/25</td><td>255.255.255.128</td><td>.1-.126</td><td>.127</td></tr>
+      <tr><td>LAN Siswa</td><td>50</td><td>/26 (62)</td><td>192.168.1.128/26</td><td>255.255.255.192</td><td>.129-.190</td><td>.191</td></tr>
+      <tr><td>Lab</td><td>20</td><td>/27 (30)</td><td>192.168.1.192/27</td><td>255.255.255.224</td><td>.193-.222</td><td>.223</td></tr>
+      <tr><td>Link</td><td>2</td><td>/30 (2)</td><td>192.168.1.224/30</td><td>255.255.255.252</td><td>.225-.226</td><td>.227</td></tr></tbody></table></div>
+      <p><strong>Pemakaian ruang:</strong></p>
+      <div class="bar" aria-label="Pemakaian"><div class="bar-used" style="width:89%"></div><div class="bar-free" style="width:11%"></div></div>
+      <p class="mono">Sisa alamat: 192.168.1.228 - 192.168.1.255 (28 alamat, 10.9%)</p>
+    </div>
+  </section>
+</main>
+<script>
+(function(){
+  // tab
+  document.querySelectorAll('.tab').forEach(function(b){b.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');x.setAttribute('aria-selected','false');});
+    document.querySelectorAll('.panel').forEach(function(x){x.classList.remove('active');});
+    b.classList.add('active'); b.setAttribute('aria-selected','true');
+    document.getElementById('panel-'+b.dataset.tab).classList.add('active');
+  });});
+  // tema
+  var sel=document.getElementById('themeSel');
+  function applyTheme(v){try{if(v==='auto'){var d=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=d;}else{document.documentElement.dataset.theme=v;}localStorage.setItem('theme',v);}catch(e){}}
+  try{var t=localStorage.getItem('theme')||'auto';sel.value=t;applyTheme(t);}catch(e){applyTheme('auto');}
+  sel.addEventListener('change',function(){applyTheme(sel.value);});
+  // mode belajar toggle (prototipe)
+  document.getElementById('modeBelajar').addEventListener('change',function(e){document.getElementById('belajarCard').classList.toggle('hidden',!e.target.checked);});
+  // chip contoh
+  document.querySelectorAll('.chip').forEach(function(c){c.addEventListener('click',function(){document.getElementById('address').value=c.dataset.a;});});
+  // live reload dev (APP_ENV=dev saja)
+  var last=null,stopped=false;async function cek(){if(stopped)return;try{var r=await fetch('/__dev/versi',{cache:'no-store'});if(r.status===404){stopped=true;return;}if(!r.ok)return;var d=await r.json();if(last!==null&&d.versi!==last){location.reload();return;}last=d.versi;}catch(e){}}cek();setInterval(cek,1000);
+})();
+</script>
 </body>
 </html>
