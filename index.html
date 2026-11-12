@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kalkulator Subnet</title>
+</head>
+<body>
+  <h1>Kalkulator Subnet &amp; VLSM</h1>
+  <p id="status">Scaffold siap</p>
+  <script>
+    (function () {
+      var last = null;
+      var stopped = false;
+      async function cek() {
+        if (stopped) return;
+        try {
+          var r = await fetch("/__dev/versi", { cache: "no-store" });
+          if (r.status === 404) { stopped = true; return; }
+          if (!r.ok) return;
+          var data = await r.json();
+          if (last !== null && data.versi !== last) {
+            location.reload();
+            return;
+          }
+          last = data.versi;
+        } catch (e) {}
+      }
+      cek();
+      setInterval(cek, 1000);
+    })();
+  </script>
+</body>
+</html>
