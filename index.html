@@ -1,34 +1,376 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kalkulator Subnet</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalkulator Subnet & VLSM</title>
+<style>
+:root{--bg:#ffffff;--surface:#f8f9fa;--border:#dadce0;--text:#202124;--muted:#5f6368;--accent:#1a73e8;--accent-fg:#fff;--error:#d93025;--ok:#188038;--net:#1a73e8;--host:#e37400;--new:#188038;--card-shadow:0 1px 3px rgba(0,0,0,.08)}
+[data-theme="dark"]{--bg:#202124;--surface:#303134;--border:#5f6368;--text:#e8eaed;--muted:#9aa0a6;--accent:#8ab4f8;--accent-fg:#202124;--error:#f28b82;--ok:#81c995;--net:#8ab4f8;--host:#fbbc04;--new:#81c995;--card-shadow:none}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg);z-index:5}
+h1{font-size:1.2rem;margin:0} .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+main{max-width:1150px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{padding:10px 16px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:1rem}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:16px;box-shadow:var(--card-shadow)}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:720px){.grid{grid-template-columns:1fr 1fr 1fr}.grid2{grid-template-columns:1fr 1fr}}
+label{display:block;font-size:.875rem;color:var(--muted);margin-bottom:4px}
+input[type=text],input[type=number],select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:1rem;background:var(--bg);color:var(--text)}
+input:focus-visible,button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.between{justify-content:space-between}
+button{padding:9px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);cursor:pointer;font-size:.95rem}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+button.small{padding:4px 8px;font-size:.8rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{padding:4px 10px;border-radius:16px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:.85rem}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.75rem;background:var(--border);margin-left:4px;color:var(--text)}
+.bit-net{color:var(--net);font-weight:600} .bit-host{color:var(--host)} .bit-new{color:var(--new);text-decoration:underline;font-weight:700}
+.legend{font-size:.85rem;color:var(--muted);margin-top:8px}
+.error{color:var(--error);font-size:.9rem;margin-top:6px;min-height:1.2em}
+.muted{color:var(--muted)} .hidden{display:none !important}
+.bar{height:20px;background:var(--border);border-radius:10px;overflow:hidden;display:flex;margin:8px 0}
+.bar-used{background:var(--accent)} .bar-free{background:var(--new);opacity:.35}
+.step{margin:6px 0;padding:8px;background:var(--bg);border-radius:8px;border:1px solid var(--border)}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px}
+.actions button{margin-left:4px}
+.vlsm-row{display:grid;grid-template-columns:90px 1fr auto;gap:8px;margin-bottom:8px;align-items:center}
+@media(max-width:520px){.vlsm-row{grid-template-columns:80px 1fr;}.vlsm-row .rm{grid-column:1/-1}}
+@media print{header .controls,.chips,.actions,button,.no-print{display:none !important} body{background:#fff;color:#000} .card{border:1px solid #ccc;box-shadow:none} a{color:#000}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+</style>
 </head>
 <body>
-  <h1>Kalkulator Subnet &amp; VLSM</h1>
-  <p id="status">Scaffold siap</p>
-  <script>
-    (function () {
-      var last = null;
-      var stopped = false;
-      async function cek() {
-        if (stopped) return;
-        try {
-          var r = await fetch("/__dev/versi", { cache: "no-store" });
-          if (r.status === 404) { stopped = true; return; }
-          if (!r.ok) return;
-          var data = await r.json();
-          if (last !== null && data.versi !== last) {
-            location.reload();
-            return;
-          }
-          last = data.versi;
-        } catch (e) {}
-      }
-      cek();
-      setInterval(cek, 1000);
-    })();
-  </script>
+<header>
+  <h1 id="appTitle">Kalkulator Subnet &amp; VLSM</h1>
+  <div class="controls" aria-label="Pengaturan">
+    <label><span class="sr-only">Tema</span>
+      <select id="themeSel" aria-label="Tema"><option value="auto">Otomatis</option><option value="light">Terang</option><option value="dark">Gelap</option></select>
+    </label>
+    <label><span class="sr-only">Bahasa</span>
+      <select id="langSel" aria-label="Bahasa"><option value="id">ID</option><option value="en">EN</option></select>
+    </label>
+  </div>
+</header>
+<main>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="subnet" role="tab" aria-selected="true" id="tabSubnet">Subnet</button>
+    <button class="tab" data-tab="vlsm" role="tab" aria-selected="false" id="tabVlsm">VLSM</button>
+  </div>
+
+  <section id="panel-subnet" class="panel active" role="tabpanel" aria-labelledby="tabSubnet">
+    <div class="card">
+      <div class="grid">
+        <div><label for="address" id="lblAddress">Address (host atau network)</label><input id="address" type="text" autocomplete="off" spellcheck="false"></div>
+        <div><label for="netmask" id="lblNetmask">Netmask</label><input id="netmask" type="text" placeholder="kosong = default kelas" autocomplete="off" spellcheck="false"></div>
+        <div><label for="netmask2" id="lblNetmask2">Pindah ke netmask (opsional)</label><input id="netmask2" type="text" placeholder="/26 subnet, /22 supernet" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btnHitung" class="primary">Hitung</button>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer"><input id="modeBelajar" type="checkbox"> <span id="lblBelajar">Mode Belajar</span></label>
+      </div>
+      <div id="errSubnet" class="error" aria-live="polite"></div>
+      <div class="chips" aria-label="Contoh" id="chips"></div>
+    </div>
+
+    <div id="subnetOut"></div>
+  </section>
+
+  <section id="panel-vlsm" class="panel" role="tabpanel" aria-labelledby="tabVlsm">
+    <div class="card">
+      <div class="grid grid2">
+        <div><label for="vlsmNet" id="lblVlsmNet">Network (CIDR)</label><input id="vlsmNet" type="text" value="192.168.1.0/24" autocomplete="off" spellcheck="false"></div>
+        <div class="row" style="align-self:end"><button id="btnVlsm" class="primary">Hitung VLSM</button> <button id="addNeed">+ Tambah kebutuhan</button></div>
+      </div>
+      <div style="margin-top:12px"><label id="lblNeeds">Kebutuhan host & label (opsional)</label>
+        <div id="vlsmRows"></div>
+      </div>
+      <div id="errVlsm" class="error" aria-live="polite"></div>
+    </div>
+    <div id="vlsmOut"></div>
+  </section>
+</main>
+<script>
+(function(){
+'use strict';
+var I18N={
+  id:{appTitle:'Kalkulator Subnet & VLSM',tabSubnet:'Subnet',tabVlsm:'VLSM',address:'Address (host atau network)',netmask:'Netmask',netmask2:'Pindah ke netmask (opsional)',hitung:'Hitung',belajar:'Mode Belajar',copyAll:'Salin semua',copyLink:'Salin tautan',copyRow:'Salin',exportCsv:'Ekspor CSV',hasil:'Hasil',pembagian:'Pembagian Subnet',supernet:'Supernet',jumlahSubnet:'Jumlah subnet',hostPerSubnet:'Hosts per subnet',digabung:'Jumlah jaringan digabung',sisa:'Sisa alamat',pakai:'Pemakaian ruang',vlsmNet:'Network (CIDR)',hitungVlsm:'Hitung VLSM',tambah:'+ Tambah kebutuhan',needs:'Kebutuhan host & label (opsional)',label:'Label',desimal:'Desimal',biner:'Biner',legenda:'Legenda bit:',jaringan:'jaringan',host:'host',bitBaru:'bit baru subnet',tema:['Otomatis','Terang','Gelap'],kosong:'Masukkan alamat untuk melihat hasil.',contoh:'Contoh',hapus:'Hapus',req:'Kebutuhan',alok:'Dialokasikan',range:'Range host',vlsmHasil:'Hasil VLSM'},
+  en:{appTitle:'Subnet & VLSM Calculator',tabSubnet:'Subnet',tabVlsm:'VLSM',address:'Address (host or network)',netmask:'Netmask',netmask2:'Move to netmask (optional)',hitung:'Calculate',belajar:'Learn Mode',copyAll:'Copy all',copyLink:'Copy link',copyRow:'Copy',exportCsv:'Export CSV',hasil:'Result',pembagian:'Subnet Division',supernet:'Supernet',jumlahSubnet:'Subnet count',hostPerSubnet:'Hosts per subnet',digabung:'Networks aggregated',sisa:'Remaining addresses',pakai:'Address space usage',vlsmNet:'Network (CIDR)',hitungVlsm:'Calculate VLSM',tambah:'+ Add requirement',needs:'Host requirements & label (optional)',label:'Label',desimal:'Decimal',biner:'Binary',legenda:'Bit legend:',jaringan:'network',host:'host',bitBaru:'new subnet bits',tema:['Auto','Light','Dark'],kosong:'Enter an address to see results.',contoh:'Examples',hapus:'Remove',req:'Required',alok:'Allocated',range:'Host range',vlsmHasil:'VLSM Result'}
+};
+var LANG='id';
+function t(k){return (I18N[LANG]&&I18N[LANG][k])||I18N.id[k]||k;}
+var EXAMPLES=['192.168.0.1/24','172.16.5.130/25','10.0.0.0/30','192.168.1.0/31','192.168.1.5/32'];
+
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function applyLang(){
+  $('appTitle').textContent=t('appTitle');
+  $('tabSubnet').textContent=t('tabSubnet'); $('tabVlsm').textContent=t('tabVlsm');
+  $('lblAddress').textContent=t('address'); $('lblNetmask').textContent=t('netmask'); $('lblNetmask2').textContent=t('netmask2');
+  $('btnHitung').textContent=t('hitung'); $('lblBelajar').textContent=t('belajar');
+  $('lblVlsmNet').textContent=t('vlsmNet'); $('btnVlsm').textContent=t('hitungVlsm'); $('addNeed').textContent=t('tambah'); $('lblNeeds').textContent=t('needs');
+  var ts=$('themeSel').options; ts[0].text=t('tema')[0]; ts[1].text=t('tema')[1]; ts[2].text=t('tema')[2];
+  renderChips();
+  if(lastResult) renderSubnet(lastResult,lastErr); else renderEmpty();
+  if(lastVlsm) renderVlsm(lastVlsm,null); 
+}
+
+// theme
+function applyTheme(v){
+  var mode=v;
+  if(v==='auto'){try{mode=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}catch(e){mode='light';}}
+  document.documentElement.setAttribute('data-theme',mode);
+  try{localStorage.setItem('theme',v);}catch(e){}
+}
+(function(){var v='auto';try{v=localStorage.getItem('theme')||'auto';}catch(e){} $('themeSel').value=v; applyTheme(v);})();
+$('themeSel').addEventListener('change',function(){applyTheme(this.value);});
+try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if($('themeSel').value==='auto')applyTheme('auto');});}catch(e){}
+$('langSel').addEventListener('change',function(){LANG=this.value;try{localStorage.setItem('lang',LANG);}catch(e){} applyLang();});
+(function(){try{LANG=localStorage.getItem('lang')||'id';}catch(e){LANG='id';}$('langSel').value=LANG;})();
+
+// tabs
+document.querySelectorAll('.tab').forEach(function(b){b.addEventListener('click',function(){
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');x.setAttribute('aria-selected','false');});
+  document.querySelectorAll('.panel').forEach(function(x){x.classList.remove('active');});
+  b.classList.add('active');b.setAttribute('aria-selected','true');
+  $('panel-'+b.dataset.tab).classList.add('active');
+});});
+
+// chips
+function renderChips(){var c=$('chips');c.innerHTML='';EXAMPLES.forEach(function(ex){var b=document.createElement('button');b.type='button';b.className='chip';b.textContent=ex;b.addEventListener('click',function(){$('address').value=ex;$('netmask').value='';$('netmask2').value='';scheduleCalc();$('address').focus();});c.appendChild(b);});}
+
+// binary render with gap at prefix boundary
+function splitBin(binStr,prefix,newBits){
+  if(!binStr) return '';
+  var raw=binStr.replace(/\./g,'');
+  var nb=newBits||0;
+  var out=''; var cls='bit-net';
+  for(var i=0;i<32;i++){
+    if(i>0 && i%8===0) out+='<span class="muted">.</span>';
+    if(i===prefix) out+=' <span class="gap" aria-hidden="true"></span> ';
+    if(i<prefix){cls='bit-net';}
+    else if(nb>0 && i < prefix+nb){cls='bit-new';}
+    else {cls='bit-host';}
+    out+='<span class="'+cls+'">'+raw[i]+'</span>';
+  }
+  return out;
+}
+function binPlain(binStr){return binStr||'-';}
+
+function ipToInt(s){var p=s.split('.').map(Number);return ((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0;}
+function intToIp(n){n=n>>>0;return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.');}
+
+var lastResult=null,lastErr=null,lastVlsm=null,calcTimer=null;
+
+function renderEmpty(){$('subnetOut').innerHTML='<div class="card"><p class="muted">'+esc(t('kosong'))+'</p></div>'; }
+
+function copyText(txt){try{navigator.clipboard.writeText(txt);}catch(e){var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e2){}document.body.removeChild(ta);}}
+
+function rowsToCsv(rows){return rows.map(function(r){return r.map(function(c){var s=String(c==null?'':c);if(/[",\n]/.test(s)) s='"'+s.replace(/"/g,'""')+'"';return s;}).join(',');}).join('\n');}
+function downloadCsv(name,csv){var blob=new Blob([csv],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);document.body.removeChild(a);},1000);}
+
+function renderSubnet(data,err){
+  $('errSubnet').textContent=err||'';
+  if(err){$('subnetOut').innerHTML='';return;}
+  if(!data||!data.hasil){renderEmpty();return;}
+  var h=data.hasil; var p=data.pembagian; var pref=h.prefix;
+  var newBits=0; if(p && p.mode==='subnet' && p.prefix_baru>p.prefix_awal) newBits=p.prefix_baru-p.prefix_awal;
+  var labels=[['Address','ip'],['Netmask','mask'],['Wildcard','wildcard'],['Network','network'],['Broadcast','broadcast'],['HostMin','first_host'],['HostMax','last_host'],['Hosts/Net','hosts']];
+  function valOf(key){
+    if(key==='ip') return $('address').value.split('/')[0].trim()||h.network;
+    if(key==='hosts') return h.usable_hosts+' (total '+h.total_alamat+')';
+    var v=h[key]; return v==null?'-':v;
+  }
+  function binOf(key){
+    if(key==='hosts') return '';
+    if(key==='ip') return splitBin(h.biner.ip,pref,newBits);
+    if(key==='mask') return splitBin(h.biner.mask,pref,newBits);
+    if(key==='wildcard') return splitBin(h.biner.wildcard,pref,newBits);
+    if(key==='network') return splitBin(h.biner.network,pref,newBits);
+    if(key==='broadcast') return h.biner.broadcast?splitBin(h.biner.broadcast,pref,newBits):'-';
+    if(key==='first_host') return h.biner.first_host?splitBin(h.biner.first_host,pref,newBits):'-';
+    if(key==='last_host') return h.biner.last_host?splitBin(h.biner.last_host,pref,newBits):'-';
+    return '';
+  }
+  var addrDisp=valOf('ip');
+  var html='';
+  html+='<div class="card"><div class="row between actions" style="margin-bottom:8px"><strong>'+esc(t('hasil'))+'</strong><div><button id="copyAllBtn" class="small">'+esc(t('copyAll'))+'</button> <button id="copyLinkBtn" class="small">'+esc(t('copyLink'))+'</button></div></div>';
+  html+='<div class="table-wrap"><table aria-label="Hasil"><thead><tr><th>Label</th><th>'+esc(t('desimal'))+'</th><th>'+esc(t('biner'))+'</th><th class="no-print"></th></tr></thead><tbody>';
+  labels.forEach(function(row){
+    var k=row[1], label=row[0];
+    var extra='';
+    if(k==='network'){extra=' <span class="badge">'+esc(h.kelas)+'</span> <span class="badge">'+esc(h.jenis)+'</span>'; label+=''+extra;}
+    if(k==='mask'){label+=' <span class="badge">/'+h.prefix+'</span>';}
+    var dec=valOf(k), bin=binOf(k);
+    html+='<tr><td>'+label+'</td><td class="mono">'+esc(dec)+'</td><td class="mono">'+bin+'</td><td class="no-print"><button class="small copy-row" data-dec="'+esc(dec)+'">'+esc(t('copyRow'))+'</button></td></tr>';
+  });
+  html+='</tbody></table></div>';
+  html+='<div class="legend">'+esc(t('legenda'))+' <span class="bit-net">'+esc(t('jaringan'))+'</span> · <span class="bit-host">'+esc(t('host'))+'</span> · <span class="bit-new">'+esc(t('bitBaru'))+'</span> (garis bawah).</div></div>';
+
+  // learn mode
+  if($('modeBelajar').checked){
+    var ipb=h.biner.ip, mb=h.biner.mask, wb=h.biner.wildcard, nb=h.biner.network;
+    var bcastb=h.biner.broadcast||'-';
+    html+='<div class="card"><strong>'+esc(t('belajar'))+'</strong>';
+    html+='<div class="step mono"><div>IP        '+esc(ipb)+'</div><div>Mask  AND '+esc(mb)+'</div><div>'+''.padEnd?'-'.repeat(41):'-----------------------------------------')+'</div><div>Network   '+esc(nb)+' ('+esc(h.network)+')</div></div>';
+    html+='<div class="step mono"><div>Wildcard  '+esc(wb)+'</div><div>Network OR Wildcard → Broadcast: '+esc(h.broadcast==null?'—':h.broadcast)+'</div></div>';
+    html+='<div class="step mono"><div>HostMin = Network + 1 = '+esc(h.first_host==null?'—':h.first_host)+'</div><div>HostMax = Broadcast - 1 = '+esc(h.last_host==null?'—':h.last_host)+'</div><div>Host usable = 2^(32-'+pref+') - '+(pref>=31? (pref==31?'0 (RFC 3021)':'0') :'2')+' = '+h.usable_hosts+'</div></div>';
+    html+='</div>';
+  }
+
+  // pembagian / supernet
+  if(p){
+    if(p.mode==='subnet'){
+      html+='<div class="card"><div class="row between actions"><strong>'+esc(t('pembagian'))+'</strong><button id="expSubnetCsv" class="small">'+esc(t('exportCsv'))+'</button></div>';
+      html+='<p class="mono">'+esc(t('jumlahSubnet'))+': '+p.jumlah_subnet+' · '+esc(t('hostPerSubnet'))+': '+p.host_per_subnet+(p.terpotong?' · (terpotong/ditampilkan sebagian)':'')+'</p>';
+      html+='<div class="table-wrap"><table><thead><tr><th>#</th><th>Network</th><th>Broadcast</th><th>HostMin</th><th>HostMax</th><th>Hosts</th></tr></thead><tbody class="mono">';
+      (p.subnet||[]).forEach(function(s){html+='<tr><td>'+s.nomor+'</td><td>'+esc(s.network_cidr)+'</td><td>'+esc(s.broadcast==null?'-':s.broadcast)+'</td><td>'+esc(s.first_host==null?'-':s.first_host)+'</td><td>'+esc(s.last_host==null?'-':s.last_host)+'</td><td>'+s.usable_hosts+'</td></tr>';});
+      html+='</tbody></table></div></div>';
+    } else if(p.mode==='supernet'){
+      html+='<div class="card"><strong>'+esc(t('supernet'))+'</strong><div class="kv mono" style="margin-top:8px">';
+      html+='<div>Network</div><div>'+esc(p.network)+'/'+p.prefix_baru+'</div>';
+      html+='<div>Broadcast</div><div>'+esc(p.broadcast)+'</div>';
+      html+='<div>HostMin</div><div>'+esc(p.first_host)+'</div>';
+      html+='<div>HostMax</div><div>'+esc(p.last_host)+'</div>';
+      html+='<div>Hosts/Net</div><div>'+p.usable_hosts+'</div>';
+      html+='<div>'+esc(t('digabung'))+'</div><div>'+p.jumlah_jaringan_digabung+'</div>';
+      html+='</div></div>';
+    }
+  }
+  $('subnetOut').innerHTML=html;
+
+  // wire actions
+  document.querySelectorAll('.copy-row').forEach(function(b){b.addEventListener('click',function(){copyText(b.getAttribute('data-dec'));});});
+  var cab=$('copyAllBtn'); if(cab) cab.addEventListener('click',function(){
+    var lines=labels.map(function(row){var k=row[1];return row[0]+'\t'+valOf(k);}); copyText(lines.join('\n'));
+  });
+  var clb=$('copyLinkBtn'); if(clb) clb.addEventListener('click',function(){copyText(location.href);});
+  var exb=$('expSubnetCsv'); if(exb && p && p.mode==='subnet') exb.addEventListener('click',function(){
+    var rows=[['#','Network','Broadcast','HostMin','HostMax','Hosts']];
+    (p.subnet||[]).forEach(function(s){rows.push([s.nomor,s.network_cidr,s.broadcast,s.first_host,s.last_host,s.usable_hosts]);});
+    downloadCsv('subnet.csv',rowsToCsv(rows));
+  });
+}
+
+function renderVlsm(data,err){
+  $('errVlsm').textContent=err||'';
+  if(err){$('vlsmOut').innerHTML='';return;}
+  if(!data){$('vlsmOut').innerHTML='';return;}
+  var labels=getVlsmLabels();
+  var totalUsed=0; var rows=data;
+  rows.forEach(function(r){totalUsed+=r.total_alamat;});
+  // derive parent size from network_cidr input
+  var netStr=$('vlsmNet').value.trim();
+  var parentTotal=256; try{var pp=netStr.split('/'); if(pp[1]) parentTotal=1<<(32-parseInt(pp[1],10)); else {var hx=hitungLocalParent(netStr); if(hx) parentTotal=hx;}}catch(e){}
+  var pct=Math.min(100, (totalUsed/parentTotal)*100);
+  var rem=parentTotal-totalUsed;
+  // remaining range: compute end of last
+  var last=rows[rows.length-1];
+  var remStart=null, remEnd=null;
+  try{var lb=ipToInt(last.broadcast||last.network); remStart=lb+1; var pfx=parseInt(netStr.split('/')[1],10); var base=ipToInt(netStr.split('/')[0]) & (pfx===0?0:(~((1<<(32-pfx))-1)>>>0)); remEnd=(base + parentTotal - 1)>>>0;}catch(e){}
+  var html='<div class="card"><div class="row between actions"><strong>'+esc(t('vlsmHasil'))+'</strong><button id="expVlsmCsv" class="small">'+esc(t('exportCsv'))+'</button></div>';
+  html+='<div class="table-wrap"><table><thead><tr><th>'+esc(t('label'))+'</th><th>'+esc(t('req'))+'</th><th>'+esc(t('alok'))+'</th><th>Network</th><th>Mask</th><th>'+esc(t('range'))+'</th><th>Broadcast</th></tr></thead><tbody class="mono">';
+  rows.forEach(function(r,i){var lab=labels[i]||''; var range=(r.first_host&&r.last_host)?(r.first_host+' - '+r.last_host):'-';
+    html+='<tr><td>'+esc(lab)+'</td><td>'+r.kebutuhan+'</td><td>/'+r.prefix+' ('+r.usable_hosts+')</td><td>'+esc(r.network_cidr)+'</td><td>'+esc(r.mask)+'</td><td>'+esc(range)+'</td><td>'+esc(r.broadcast==null?'-':r.broadcast)+'</td></tr>';});
+  html+='</tbody></table></div>';
+  html+='<p><strong>'+esc(t('pakai'))+'</strong></p><div class="bar" aria-label="Pemakaian"><div class="bar-used" style="width:'+pct.toFixed(2)+'%"></div><div class="bar-free" style="width:'+Math.max(0,100-pct).toFixed(2)+'%"></div></div>';
+  if(rem>0 && remStart!==null && remEnd!==null && remStart<=remEnd){
+    html+='<p class="mono">'+esc(t('sisa'))+': '+esc(intToIp(remStart))+' - '+esc(intToIp(remEnd))+' ('+rem+' alamat, '+((rem/parentTotal)*100).toFixed(1)+'%)</p>';
+  } else if(rem<=0){
+    html+='<p class="mono">'+esc(t('sisa'))+': 0</p>';
+  }
+  html+='</div>';
+  $('vlsmOut').innerHTML=html;
+  var exb=$('expVlsmCsv'); if(exb) exb.addEventListener('click',function(){
+    var csvRows=[['Label','Kebutuhan','Network','Mask','HostMin','HostMax','Broadcast','Usable']];
+    rows.forEach(function(r,i){csvRows.push([labels[i]||'',r.kebutuhan,r.network_cidr,r.mask,r.first_host,r.last_host,r.broadcast,r.usable_hosts]);});
+    downloadCsv('vlsm.csv',rowsToCsv(csvRows));
+  });
+}
+function hitungLocalParent(){return null;}
+function getVlsmLabels(){var labs=[];document.querySelectorAll('#vlsmRows .vlsm-row').forEach(function(r){var ins=r.querySelectorAll('input');labs.push(ins[1]?ins[1].value:'');});return labs;}
+
+async function doCalc(){
+  var a=$('address').value.trim(), m=$('netmask').value.trim(), m2=$('netmask2').value.trim();
+  if(!a){lastResult=null;lastErr=null;$('errSubnet').textContent='';renderEmpty();updateQS();return;}
+  var url='/api/ipcalc?address='+encodeURIComponent(a);
+  if(m) url+='&netmask='+encodeURIComponent(m);
+  if(m2) url+='&netmask2='+encodeURIComponent(m2);
+  try{
+    var r=await fetch(url,{cache:'no-store'});
+    var d=await r.json();
+    if(!r.ok){lastResult=null; lastErr=(d&&d.detail)?d.detail:('Error '+r.status); renderSubnet(null,lastErr);}
+    else {lastResult=d; lastErr=null; renderSubnet(d,null);}
+  }catch(e){lastResult=null; lastErr='Gagal menghubungi server'; renderSubnet(null,lastErr);}
+  updateQS();
+}
+function scheduleCalc(){clearTimeout(calcTimer);calcTimer=setTimeout(doCalc,250);}
+$('btnHitung').addEventListener('click',doCalc);
+$('address').addEventListener('input',scheduleCalc);
+$('netmask').addEventListener('input',scheduleCalc);
+$('netmask2').addEventListener('input',scheduleCalc);
+['address','netmask','netmask2'].forEach(function(id){$(id).addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();doCalc();}});});
+$('modeBelajar').addEventListener('change',function(){if(lastResult) renderSubnet(lastResult,lastErr);});
+
+function updateQS(){
+  var a=$('address').value.trim(), m=$('netmask').value.trim(), m2=$('netmask2').value.trim();
+  var p=new URLSearchParams(); if(a)p.set('a',a); if(m)p.set('m',m); if(m2)p.set('m2',m2);
+  var qs=p.toString(); var url=location.pathname+(qs?'?'+qs:'');
+  try{history.replaceState(null,'',url);}catch(e){}
+}
+function loadQS(){
+  var p=new URLSearchParams(location.search);
+  if(p.has('a')) $('address').value=p.get('a');
+  if(p.has('m')) $('netmask').value=p.get('m');
+  if(p.has('m2')) $('netmask2').value=p.get('m2');
+}
+
+// VLSM
+function addVlsmRow(req,label){
+  var row=document.createElement('div'); row.className='vlsm-row';
+  row.innerHTML='<input type="text" value="'+esc(req||'')+'" aria-label="Kebutuhan host" placeholder="host"><input type="text" value="'+esc(label||'')+'" aria-label="Label" placeholder="Label (opsional)"><button type="button" class="small rm" aria-label="Hapus">✕</button>';
+  row.querySelector('.rm').addEventListener('click',function(){row.remove();});
+  $('vlsmRows').appendChild(row);
+}
+$('addNeed').addEventListener('click',function(){addVlsmRow('','');});
+function collectVlsm(){
+  var net=$('vlsmNet').value.trim();
+  var kebutuhan=[]; var any=false;
+  document.querySelectorAll('#vlsmRows .vlsm-row').forEach(function(r){
+    var ins=r.querySelectorAll('input'); var v=ins[0].value.trim(); if(v==='') return; any=true; var n=parseInt(v,10); kebutuhan.push(isNaN(n)?v:n);
+  });
+  return {network:net,kebutuhan_host:kebutuhan};
+}
+async function doVlsm(){
+  var body=collectVlsm();
+  try{
+    var r=await fetch('/api/vlsm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
+    if(!r.ok){lastVlsm=null; renderVlsm(null,(d&&d.detail)?d.detail:('Error '+r.status));}
+    else {lastVlsm=d; renderVlsm(d,null);}
+  }catch(e){lastVlsm=null; renderVlsm(null,'Gagal menghubungi server');}
+}
+$('btnVlsm').addEventListener('click',doVlsm);
+
+// init
+renderChips(); applyLang();
+[['100','LAN Guru'],['50','LAN Siswa'],['20','Lab'],['2','Link']].forEach(function(x){addVlsmRow(x[0],x[1]);});
+loadQS();
+if(!$('address').value) $('address').value='172.16.5.130/25';
+doCalc();
+
+// live reload dev (APP_ENV=dev saja)
+(function(){var last=null,stopped=false;async function cek(){if(stopped)return;try{var r=await fetch('/__dev/versi',{cache:'no-store'});if(r.status===404){stopped=true;return;}if(!r.ok)return;var d=await r.json();if(last!==null&&d.versi!==last){location.reload();return;}last=d.versi;}catch(e){}}cek();setInterval(cek,1000);})();
+})();
+</script>
 </body>
 </html>
